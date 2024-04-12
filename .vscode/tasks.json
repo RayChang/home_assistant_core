@@ -16,7 +16,7 @@
     {
       "label": "Pytest",
       "type": "shell",
-      "command": "python3 -m pytest --timeout=10 tests",
+      "command": "./venv/bin/python -m pytest --timeout=10 tests",
       "dependsOn": ["Install all Test Requirements"],
       "group": {
         "kind": "test",
@@ -31,7 +31,7 @@
     {
       "label": "Pytest (changed tests only)",
       "type": "shell",
-      "command": "python3 -m pytest --timeout=10 --picked",
+      "command": "./venv/bin/python -m pytest --timeout=10 --picked",
       "group": {
         "kind": "test",
         "isDefault": true
@@ -75,7 +75,7 @@
       "label": "Code Coverage",
       "detail": "Generate code coverage report for a given integration.",
       "type": "shell",
-      "command": "python3 -m pytest ./tests/components/${input:integrationName}/ --cov=homeassistant.components.${input:integrationName} --cov-report term-missing --durations-min=1 --durations=0 --numprocesses=auto",
+      "command": "./venv/bin/python -m pytest ./tests/components/${input:integrationName}/ --cov=homeassistant.components.${input:integrationName} --cov-report term-missing --durations-min=1 --durations=0 --numprocesses=auto",
       "group": {
         "kind": "test",
         "isDefault": true
@@ -132,7 +132,7 @@
       "label": "Compile English translations",
       "detail": "In order to test changes to translation files, the translation strings must be compiled into Home Assistant's translation directories.",
       "type": "shell",
-      "command": "python3 -m script.translations develop --all",
+      "command": "./venv/bin/python -m script.translations develop --all",
       "group": {
         "kind": "build",
         "isDefault": true
@@ -142,7 +142,7 @@
       "label": "Run scaffold",
       "detail": "Add new functionality to a integration using a scaffold.",
       "type": "shell",
-      "command": "python3 -m script.scaffold ${input:scaffoldName} --integration ${input:integrationName}",
+      "command": "./venv/bin/python -m script.scaffold ${input:scaffoldName} --integration ${input:integrationName}",
       "group": {
         "kind": "build",
         "isDefault": true
@@ -152,7 +152,7 @@
       "label": "Create new integration",
       "detail": "Use the scaffold to create a new integration.",
       "type": "shell",
-      "command": "python3 -m script.scaffold integration",
+      "command": "./venv/bin/python -m script.scaffold integration",
       "group": {
         "kind": "build",
         "isDefault": true

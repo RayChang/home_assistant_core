@@ -1965,6 +1965,7 @@ pymitv==1.4.3
 pymochad==0.2.0
 
 # homeassistant.components.modbus
+# homeassistant.components.rs485_switch
 pymodbus==3.6.5
 
 # homeassistant.components.monoprice
