@@ -12,7 +12,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DEFAULT_STATE, DOMAIN, PLACEHOLDER
-from .rs485_tcp_pub_sub import RS485TcpPubSub
+from .rs485_tcp_publisher import RS485TcpPublisher
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -92,7 +92,10 @@ class RS485Switch(SwitchEntity):
         self._now = False
         # 使用從機ID、入口ID和開關索引來構造一個唯一識別符
         self._unique_id = f"{self._entry_id}_{self._index}"
-        self._pub_sub: RS485TcpPubSub = self.hass.data[DOMAIN]["rs485_tcp_pub_sub"]
+        # 獲取 RS485TcpPublisher 實例
+        self._publisher: RS485TcpPublisher = self.hass.data[DOMAIN][
+            "rs485_tcp_publisher"
+        ]
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -140,16 +143,21 @@ class RS485Switch(SwitchEntity):
 
     async def async_added_to_hass(self):
         """當實體添加到 Home Assistant 時，設置狀態更新的計劃."""
-        await self._pub_sub.start()
-        await self._pub_sub.subscribe(self._subscribe_callback, self._entry_id)
+        await self._publisher.start()
+        await self._publisher.subscribe(self._subscribe_callback, self._entry_id)
         # 設置狀態更新的計劃
         _LOGGER.info("🚧 Added to hass 🚧 %s", self._index)
 
     async def async_will_remove_from_hass(self):
         """當實體從 Home Assistant 中移除時，取消計劃."""
-        await self._pub_sub.unsubscribe(self._entry_id)
+        await self._publisher.unsubscribe(self._entry_id)
+        sub_length = self._publisher.subscribers_length
         # 取消狀態更新的計劃
         _LOGGER.info("🚧 Removed from hass 🚧 %s", self._index)
+
+        if sub_length == 0:
+            await self._publisher.close()
+            _LOGGER.info("🚧 Close publisher connect 🚧")
 
     async def async_update(self):
         """更新開關的狀態."""

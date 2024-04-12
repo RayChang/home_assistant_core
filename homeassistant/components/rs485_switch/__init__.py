@@ -18,7 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
 from .const import DEFAULT_STATE, DOMAIN, MODEL
-from .rs485_tcp_pub_sub import RS485TcpPubSub
+from .rs485_tcp_publisher import RS485TcpPublisher
 
 # For your initial PR, limit it to 1 platform.
 PLATFORMS: list[Platform] = [Platform.SWITCH]
@@ -41,7 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(
         DOMAIN,
         {
-            "rs485_tcp_pub_sub": RS485TcpPubSub(
+            "rs485_tcp_publisher": RS485TcpPublisher(
                 host=entry.data[CONF_HOST], port=entry.data[CONF_PORT]
             )
         },

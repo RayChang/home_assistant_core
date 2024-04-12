@@ -1,4 +1,4 @@
-"""RS485 TCP Pub/Sub."""
+"""RS485 TCP Publisher."""
 import asyncio
 import logging
 from typing import Any
@@ -6,13 +6,13 @@ from typing import Any
 _LOGGER = logging.getLogger(__name__)
 
 
-class RS485TcpPubSub:
-    """RS485 TCP Pub/Sub."""
+class RS485TcpPublisher:
+    """RS485 TCP Publisher."""
 
     def __init__(
         self, host: str, port: int, max_retry_delay: int = 60, connect_timeout: int = 10
     ) -> None:
-        """初始化 RS485 TCP Pub/Sub 服務."""
+        """初始化 RS485 TCP Publisher 服務."""
 
         self.host = host
         self.port = port
@@ -23,6 +23,11 @@ class RS485TcpPubSub:
         self.lock = asyncio.Lock()  # 增加一個鎖來控制對訂閱者列表的訪問
         self.running = False  # 增加一個運行狀態標誌
         self.writer = None  # 用於存儲當前連接的StreamWriter對象
+
+    @property
+    def subscribers_length(self) -> int:
+        """返回 self.subscribers 的長度作为属性."""
+        return len(self.subscribers)
 
     async def subscribe(self, callback, callback_id=None) -> None:
         """訂閱數據，必須提供 ID."""
