@@ -111,6 +111,28 @@ class RS485Switch(SwitchEntity):
         result = (high_byte << 8) + (low_byte & 0xFF)
         return result
 
+    async def _watchdogs(self):
+        """監控 Publisher 是否運行."""
+        watchdog_task: asyncio.Task = self.hass.data[DOMAIN][self._entry_id][
+            "watchdog_task"
+        ]
+        try:
+            while True:
+                _LOGGER.warning(
+                    "❓ Publisher is running?: %s ❓", self._publisher.is_running
+                )
+                if self._publisher.is_running:
+                    await asyncio.sleep(0.1 + self._slave / 10)
+                    await asyncio.wait_for(
+                        self._publisher.read_register(self._slave, REGISTER_ADDRESS, 1),
+                        timeout=2 * self._slave,
+                    )
+                    watchdog_task.cancel()
+                await asyncio.sleep(3)
+        except asyncio.CancelledError:
+            _LOGGER.info("Watchdog task was cancelled")
+            return
+
     async def _handle_switch(self, is_on: bool) -> None:
         """處理開關的切換."""
         self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES] = self._index
@@ -130,42 +152,57 @@ class RS485Switch(SwitchEntity):
             _LOGGER.error("Data too short, received: %s", data)
             return
 
+        _LOGGER.info(
+            "🚧 Subscribe callback DATA:%s 🚧 ",
+            data,
+        )
+
         length, slave, function_code, *last = data[5:]
         if length == 6 and function_code == 3:
             self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES] = (
                 int(math.log(last[len(last) - 1], 2)) + 1
             )
 
-        if (
-            slave == self._slave
-            and self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES] == self._index
-        ):
-            _LOGGER.info(
-                "🚧 Subscribe callback DATA:%s / SLAVE: %s / INDEX: %s / index: %s / LAST: %s 🚧 ",
-                self._slave,
-                data,
-                self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES],
-                self._index,
-                last,
-            )
+        switch_index = self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES]
+        if slave == self._slave:
+            if switch_index == self._index:
+                _LOGGER.info(
+                    "🚧 Subscribe callback DATA:%s / SLAVE: %s / INDEX: %s / index: %s / LAST: %s 🚧 ",
+                    self._slave,
+                    data,
+                    switch_index,
+                    self._index,
+                    last,
+                )
 
-            if function_code == 3:
-                if length == 5:
+                if function_code == 3:
+                    if length == 5:
+                        self.hass.data[DOMAIN][self._entry_id][
+                            CONF_STATE
+                        ] = self._binary_list_to_int(last[-2:])
+                    elif length == 6:
+                        await self._publisher.read_register(
+                            self._slave, REGISTER_ADDRESS, 1
+                        )
+                elif function_code == 6:
                     self.hass.data[DOMAIN][self._entry_id][
                         CONF_STATE
                     ] = self._binary_list_to_int(last[-2:])
-                elif length == 6:
-                    await self._publisher.read_register(
-                        self._slave, REGISTER_ADDRESS, 1
-                    )
-            elif function_code == 6:
-                pass
-            await self.async_update()
+            elif (function_code == 3 and length == 5) or function_code == 6:
+                self.hass.data[DOMAIN][self._entry_id][
+                    CONF_STATE
+                ] = self._binary_list_to_int(last[-2:])
+
+        await self.async_update()
 
     async def async_added_to_hass(self):
         """當實體添加到 Home Assistant 時，設置狀態更新的計劃."""
         await self._publisher.start()
         await self._publisher.subscribe(self._subscribe_callback, self._unique_id)
+        if self.hass.data[DOMAIN][self._entry_id]["watchdog_task"] is None:
+            self.hass.data[DOMAIN][self._entry_id][
+                "watchdog_task"
+            ] = asyncio.create_task(self._watchdogs())
         # 設置狀態更新的計劃
         _LOGGER.info("🚧 Added to hass 🚧 %s", self._index)
 

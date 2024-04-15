@@ -27,7 +27,8 @@ class RS485TcpPublisher:
         self.connection_task = None  # 用於存儲連接任務的引用
         self.subscribers: dict[str, Any] = {}
         self.lock = asyncio.Lock()  # 增加一個鎖來控制對訂閱者列表的訪問
-        self.running = False  # 增加一個運行狀態標誌
+        self._running = False  # 增加一個運行狀態標誌
+        self.is_running = False
         self.writer = None  # 用於存儲當前連接的StreamWriter對象
 
     @property
@@ -90,7 +91,7 @@ class RS485TcpPublisher:
 
         _LOGGER.info("💬 Message: %s 💬", message)
         if self.writer is None or self.writer.is_closing():
-            _LOGGER.error("⛔️ 無有效連線，無法發送訊息。 ⛔️")
+            _LOGGER.error("⛔️ 無有效連線，無法發送訊息。⛔️")
             return
 
         async with self.lock:
@@ -127,13 +128,14 @@ class RS485TcpPublisher:
 
     async def _handle_connection(self):
         retry_delay = 1  # 初始重試間隔為1秒
-        while self.running:
+        while self._running:
             try:
                 reader, self.writer = await asyncio.wait_for(
                     asyncio.open_connection(self.host, self.port),
                     timeout=self.connect_timeout,
                 )
                 _LOGGER.info("成功連接到 %s:%i", self.host, self.port)
+                self.is_running = True
                 retry_delay = 1  # 連接成功，重置重試間隔
                 await self._manage_connection(reader)
             except TimeoutError:
@@ -141,7 +143,7 @@ class RS485TcpPublisher:
             except Exception as e:  # pylint: disable=broad-except
                 _LOGGER.error("連線錯誤: %s", e)
             finally:
-                if self.running:  # 只有在運行狀態下才輸出重連信息
+                if self._running:  # 只有在運行狀態下才輸出重連信息
                     _LOGGER.info(
                         "嘗試重新連接到 %s:%i，等待 %i 秒…",
                         self.host,
@@ -168,11 +170,12 @@ class RS485TcpPublisher:
         if self.writer and not self.writer.is_closing():
             self.writer.close()
             await self.writer.wait_closed()
+            self.is_running = False
 
     async def start(self):
         """建立連線並開始接收數據."""
-        if not self.running:
-            self.running = True
+        if not self._running:
+            self._running = True
             # 創建並啟動一個異步任務進行連接和數據接收
             self.connection_task = asyncio.create_task(self._handle_connection())
         else:
@@ -180,7 +183,7 @@ class RS485TcpPublisher:
 
     async def close(self):
         """關閉當前連接並停止嘗試重連."""
-        self.running = False  # 設置運行狀態為False以停止重連嘗試
+        self._running = False  # 設置運行狀態為False以停止重連嘗試
         if self.connection_task and not self.connection_task.done():
             self.connection_task.cancel()
             try:
