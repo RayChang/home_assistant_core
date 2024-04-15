@@ -31,24 +31,16 @@ async def async_setup_entry(
 ) -> None:
     """通過配置條目設置開關實體."""
 
-    # 獲取實體註冊表
-    # entity_reg = er.async_get(hass)
-    # modbus_switch_sensor_entity_id = entity_reg.async_get_entity_id(
-    #     "sensor", "modbus", f"wall_switch_status_{entry.data[CONF_SLAVE]}"
-    # )
-
     # 從 entry.data 中獲取配置數據
     config = {
         **entry.data,
         "entry_id": entry.entry_id,
-        # "sensor_id": modbus_switch_sensor_entity_id,
     }
 
     switch_count = entry.data.get(CONF_COUNT, 1)
     switches = []
     for i in range(switch_count):
         switches.append(RS485Switch(hass, config, i + 1))
-        # 添加開關實體到 Home Assistant
     async_add_entities(switches, True)
 
 
@@ -61,18 +53,15 @@ class RS485Switch(SwitchEntity):
     def __init__(
         self, hass: HomeAssistant, config: dict[str, Any], switch_index: int
     ) -> None:
-        """初始化开关."""
+        """初始化開關."""
         self.hass = hass
         self._is_on: bool = False
         self._name: str = config.get(CONF_NAME, "")
         self._slave: int = config.get(CONF_SLAVE, 0)
         self._state: int = DEFAULT_STATE
-        # self._sensor_id = config.get("sensor_id")
         self._entry_id: str = config.get("entry_id", "")
         self._index: int = switch_index
-        # 使用從機ID、入口ID和開關索引來構造一個唯一識別符
         self._unique_id: str = f"{self._entry_id}_{self._index}"
-        # 獲取 RS485TcpPublisher 實例
         self._publisher: RS485TcpPublisher = self.hass.data[DOMAIN][
             "rs485_tcp_publisher"
         ]

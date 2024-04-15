@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_DEVICE,
@@ -21,10 +19,7 @@ from homeassistant.helpers import device_registry as dr
 from .const import DOMAIN, MODEL
 from .rs485_tcp_publisher import RS485TcpPublisher
 
-# For your initial PR, limit it to 1 platform.
 PLATFORMS: list[Platform] = [Platform.SWITCH]
-
-_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
