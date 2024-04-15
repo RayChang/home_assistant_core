@@ -5,6 +5,7 @@ MODBUS_HUB = "rs-485_switch_hub"
 MODEL = "LP-F8"
 DEFAULT_STATE = 256
 PLACEHOLDER = "00000000"
+REGISTER_ADDRESS = 0x1008
 
 # 按鈕數量
 KEY_COUNT = list(range(1, 7))

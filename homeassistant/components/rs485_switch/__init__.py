@@ -12,12 +12,13 @@ from homeassistant.const import (
     CONF_PORT,
     CONF_SLAVE,
     CONF_STATE,
+    CONF_SWITCHES,
     Platform,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from .const import DEFAULT_STATE, DOMAIN, MODEL
+from .const import DOMAIN, MODEL
 from .rs485_tcp_publisher import RS485TcpPublisher
 
 # For your initial PR, limit it to 1 platform.
@@ -42,13 +43,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         DOMAIN,
         {
             "rs485_tcp_publisher": RS485TcpPublisher(
-                host=entry.data[CONF_HOST], port=entry.data[CONF_PORT]
+                host=entry.data[CONF_HOST], port=entry.data[CONF_PORT], byte_length=12
             )
         },
     )
     hass.data[DOMAIN][entry.entry_id] = {}
     hass.data[DOMAIN][entry.entry_id][CONF_DEVICE] = device
-    hass.data[DOMAIN][entry.entry_id][CONF_STATE] = DEFAULT_STATE
+    hass.data[DOMAIN][entry.entry_id][CONF_STATE] = None
+    hass.data[DOMAIN][entry.entry_id][CONF_SWITCHES] = None
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
