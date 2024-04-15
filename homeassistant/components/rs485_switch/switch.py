@@ -141,7 +141,7 @@ class RS485Switch(SwitchEntity):
             and self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES] == self._index
         ):
             _LOGGER.info(
-                "🚧 SLAVE: %s - Subscribe callback 🚧 DATA:%s, INDEX: %s, index: %s, LAST: %s",
+                "🚧 Subscribe callback DATA:%s / SLAVE: %s / INDEX: %s / index: %s / LAST: %s 🚧 ",
                 self._slave,
                 data,
                 self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES],

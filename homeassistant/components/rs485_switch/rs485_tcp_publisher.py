@@ -88,18 +88,18 @@ class RS485TcpPublisher:
     async def _send_message(self, message: bytes) -> None:
         """向 RS-485 伺服器發送訊息."""
 
-        _LOGGER.info("Message: %s", message)
+        _LOGGER.info("💬 Message: %s 💬", message)
         if self.writer is None or self.writer.is_closing():
-            _LOGGER.error("無有效連線，無法發送訊息。")
+            _LOGGER.error("⛔️ 無有效連線，無法發送訊息。 ⛔️")
             return
 
         async with self.lock:
             try:
                 self.writer.write(message)
                 await self.writer.drain()
-                _LOGGER.info("訊息已成功發送。")
+                _LOGGER.info("🚀 訊息已成功發送。 🚀")
             except Exception as e:  # pylint: disable=broad-except
-                _LOGGER.error("發送訊息時出錯: %s", e)
+                _LOGGER.error("🚧 發送訊息時出錯: %s 🚧", e)
 
     async def read_register(self, slave: int, register: int, length: int) -> None:
         """讀取寄存器。構造並發送Modbus TCP請求讀取保持寄存器的消息."""
