@@ -18,7 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DEFAULT_STATE, DOMAIN, PLACEHOLDER, REGISTER_ADDRESS
+from .const import DEFAULT_STATE, DOMAIN, HAS_RELAY, PLACEHOLDER, REGISTER_ADDRESS
 from .rs485_tcp_publisher import RS485TcpPublisher
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,6 +59,7 @@ class RS485Switch(SwitchEntity):
         self._name: str = config.get(CONF_NAME, "")
         self._slave: int = config.get(CONF_SLAVE, 0)
         self._state: int = DEFAULT_STATE
+        self._has_relay: bool = config.get(HAS_RELAY, True)
         self._entry_id: str = config.get("entry_id", "")
         self._index: int = switch_index
         self._unique_id: str = f"{self._entry_id}_{self._index}"
@@ -141,18 +142,36 @@ class RS485Switch(SwitchEntity):
             _LOGGER.error("Data too short, received: %s", data)
             return
 
-        _LOGGER.info(
-            "🚧 Subscribe callback DATA:%s 🚧 ",
-            data,
-        )
+        _length, slave, function_code, *_last = data[5:]
 
-        length, slave, function_code, *last = data[5:]
+        # [0,0,0,0,0,6,3,3,0,2,13,1]
+        # 弱電版本的開關不管是按下實體按鈕，或是讀取狀態，都會回傳 6 bytes
+        # 而有繼電器版本的開關，當按下實體按鈕時，會回傳 6 bytes，讀取狀態時，會回傳 5 bytes
+        # 所以透過第十一位的值來判斷行為是否為手動觸發或是讀取狀態
+        # 當第十一位的值等於 256 時，表示是讀取狀態，所以將 last 的第一位去掉，並改變 length
+        # 讓接下來的判斷依照有繼電器版本的開關來處理
+        if self._has_relay is False and (_last[-2:][0] << 8) == 256:
+            last = _last[1:]
+            length = _length - 1
+        else:
+            last = _last
+            length = _length
+
+        # 如果是手動觸發，則紀錄按下的是哪個按鈕
+        # 弱電版本的開關，按下按鈕時會回傳兩筆資料
+        # 第一筆是按下的是哪顆按鈕 [0,0,0,0,0,6,3,3,0,2,13,1]
+        # 第二筆是按鈕的狀態 [0,0,0,0,0,6,3,3,0,2,1,0]
+        # 因為第二筆的資料判斷到最後一位是 0，則直接跳出
         if length == 6 and function_code == 3:
-            self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES] = (
-                int(math.log(last[len(last) - 1], 2)) + 1
-            )
+            ls = last[-1:][0]
+            if ls == 0:
+                return
+            m = math.log(ls, 2)
+            self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES] = int(m) + 1
 
+        # 紀錄按下的是哪個按鈕
         switch_index = self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES]
+
         if slave == self._slave:
             if switch_index == self._index:
                 _LOGGER.info(
@@ -165,18 +184,26 @@ class RS485Switch(SwitchEntity):
                 )
 
                 if function_code == 3:
+                    # step_3-5
+                    # 如果是讀取寄存器而且是讀取狀態，則將狀態更新到 DOMAIN 裡提供給其他開關使用
                     if length == 5:
                         self.hass.data[DOMAIN][self._entry_id][
                             CONF_STATE
                         ] = self._binary_list_to_int(last[-2:])
+
+                    # step_3-6
+                    # 如果是按下實體按鈕，則讀取狀態，會進入到 step_3-5
                     elif length == 6:
                         await self._publisher.read_register(
                             self._slave, REGISTER_ADDRESS, 1
                         )
+                # 如果是寫入寄存器，則將更新後的狀態更新到 DOMAIN 裡提供給其他開關使用
                 elif function_code == 6:
                     self.hass.data[DOMAIN][self._entry_id][
                         CONF_STATE
                     ] = self._binary_list_to_int(last[-2:])
+
+            # 這裡是為了讓其他不是在 HA 裡的操作也能更新狀態
             elif (function_code == 3 and length == 5) or function_code == 6:
                 self.hass.data[DOMAIN][self._entry_id][
                     CONF_STATE
@@ -186,8 +213,11 @@ class RS485Switch(SwitchEntity):
 
     async def async_added_to_hass(self):
         """當實體添加到 Home Assistant 時，設置狀態更新的計劃."""
+        # 當實體添加到 Home Assistant 時，起始連接 rs-485 伺服器
         await self._publisher.start()
+        # 訂閱數據
         await self._publisher.subscribe(self._subscribe_callback, self._unique_id)
+        # 設置 watchdog 任務
         if self.hass.data[DOMAIN][self._entry_id]["watchdog_task"] is None:
             self.hass.data[DOMAIN][self._entry_id][
                 "watchdog_task"
@@ -202,6 +232,7 @@ class RS485Switch(SwitchEntity):
         # 取消狀態更新的計劃
         _LOGGER.info("🚧 Removed from hass 🚧 %s", self._index)
 
+        # 如果沒有訂閱者，則關閉 rs-485 伺服器的連接
         if sub_length == 0:
             await self._publisher.close()
             _LOGGER.info("🚧 Close publisher connect 🚧")
@@ -209,12 +240,14 @@ class RS485Switch(SwitchEntity):
     async def async_update(self):
         """更新開關的狀態."""
         state = self.hass.data[DOMAIN][self._entry_id][CONF_STATE]
-        _LOGGER.info(
-            "🚧 ------- SLAVE: %s / STATE:%s / index: %s ------- 🚧",
-            self._slave,
-            state,
-            self._index,
-        )
+        switch_index = self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES]
+        if switch_index == self._index:
+            _LOGGER.info(
+                "🚧 ------- SLAVE: %s / STATE:%s / index: %s ------- 🚧",
+                self._slave,
+                state,
+                self._index,
+            )
 
         if state is not None:
             state_str = bin(state % DEFAULT_STATE)[2:]

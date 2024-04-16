@@ -5,9 +5,15 @@
         "data": {
           "host": "[%key:common::config_flow::data::host%]",
           "port": "[%key:common::config_flow::data::port%]",
+          "device": "[%key:common::config_flow::data::device%]"
+        }
+      },
+      "device_config": {
+        "data": {
           "name": "[%key:common::config_flow::data::name%]",
           "slave": "slave",
-          "count": "count"
+          "count": "count",
+          "has_relay": "has_relay"
         }
       }
     },
