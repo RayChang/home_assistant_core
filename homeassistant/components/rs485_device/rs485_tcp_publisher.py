@@ -36,37 +36,37 @@ class RS485TcpPublisher:
         """返回 self.subscribers 的長度作为属性."""
         return len(self.subscribers)
 
-    def _construct_modbus_message(
-        self,
-        slave: int,
-        function_code: int,
-        register: int,
-        value: int | None = None,
-        length: int | None = None,
-    ) -> bytes:
-        """Modbus TCP Message."""
-        header = b"\x00\x00\x00\x00\x00\x06" + bytes([slave])
-        func_code = bytes([function_code])
-        register_high = register >> 8
-        register_low = register & 0xFF
+    # def _construct_modbus_message(
+    #     self,
+    #     slave: int,
+    #     function_code: int,
+    #     register: int,
+    #     value: int | None = None,
+    #     length: int | None = None,
+    # ) -> bytes:
+    #     """Modbus TCP Message."""
+    #     header = b"\x00\x00\x00\x00\x00\x06" + bytes([slave])
+    #     func_code = bytes([function_code])
+    #     register_high = register >> 8
+    #     register_low = register & 0xFF
 
-        if function_code in (3, 4) and length is not None:  # 讀取寄存器，需要長度參數
-            length_high = length >> 8
-            length_low = length & 0xFF
-            message = (
-                header
-                + func_code
-                + bytes([register_high, register_low, length_high, length_low])
-            )
-        elif function_code == 6 and value is not None:  # 寫單個寄存器，需要值參數
-            value_high = value >> 8
-            value_low = value & 0xFF
-            message = (
-                header
-                + func_code
-                + bytes([register_high, register_low, value_high, value_low])
-            )
-        return message
+    #     if function_code in (3, 4) and length is not None:  # 讀取寄存器，需要長度參數
+    #         length_high = length >> 8
+    #         length_low = length & 0xFF
+    #         message = (
+    #             header
+    #             + func_code
+    #             + bytes([register_high, register_low, length_high, length_low])
+    #         )
+    #     elif function_code == 6 and value is not None:  # 寫單個寄存器，需要值參數
+    #         value_high = value >> 8
+    #         value_low = value & 0xFF
+    #         message = (
+    #             header
+    #             + func_code
+    #             + bytes([register_high, register_low, value_high, value_low])
+    #         )
+    #     return message
 
     async def subscribe(self, callback, callback_id=None) -> None:
         """訂閱數據，必須提供 ID."""
@@ -86,7 +86,7 @@ class RS485TcpPublisher:
             else:
                 _LOGGER.info('沒有找到 ID 為"%s"的訂閱者', callback_id)
 
-    async def _send_message(self, message: bytes) -> None:
+    async def send_message(self, message: bytes) -> None:
         """向 RS-485 伺服器發送訊息."""
 
         _LOGGER.info("💬 Message: %s 💬", message)
@@ -102,15 +102,15 @@ class RS485TcpPublisher:
             except Exception as e:  # pylint: disable=broad-except
                 _LOGGER.error("🚧 發送訊息時出錯: %s 🚧", e)
 
-    async def read_register(self, slave: int, register: int, length: int) -> None:
-        """讀取寄存器。構造並發送Modbus TCP請求讀取保持寄存器的消息."""
-        message = self._construct_modbus_message(slave, 3, register, length=length)
-        await self._send_message(message)
+    # async def read_register(self, slave: int, register: int, length: int) -> None:
+    #     """讀取寄存器。構造並發送Modbus TCP請求讀取保持寄存器的消息."""
+    #     message = self._construct_modbus_message(slave, 3, register, length=length)
+    #     await self._send_message(message)
 
-    async def write_register(self, slave: int, register: int, value: int) -> None:
-        """寫入寄存器。構造並發送 Modbus TCP 請求寫入保持寄存器的消息."""
-        message = self._construct_modbus_message(slave, 6, register, value=value)
-        await self._send_message(message)
+    # async def write_register(self, slave: int, register: int, value: int) -> None:
+    #     """寫入寄存器。構造並發送 Modbus TCP 請求寫入保持寄存器的消息."""
+    #     message = self._construct_modbus_message(slave, 6, register, value=value)
+    #     await self._send_message(message)
 
     async def _publish(self, data):
         """發布數據給所有訂閱者，並返回他們的 ID."""

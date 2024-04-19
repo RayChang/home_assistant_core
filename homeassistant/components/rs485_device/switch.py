@@ -3,27 +3,25 @@ import asyncio
 from datetime import timedelta
 import logging
 import math
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONF_COUNT,
-    CONF_NAME,
-    CONF_SLAVE,
-    CONF_STATE,
-    CONF_SWITCHES,
-)
+from homeassistant.const import CONF_COUNT, CONF_SLAVE, CONF_STATE, CONF_SWITCHES
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DEFAULT_STATE, DOMAIN, HAS_RELAY, PLACEHOLDER, REGISTER_ADDRESS
+from .const import DOMAIN, HAS_RELAY
 from .rs485_tcp_publisher import RS485TcpPublisher
 
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(seconds=5)
+
+DEFAULT_STATE: Final = 256
+PLACEHOLDER: Final = "00000000"
+REGISTER_ADDRESS: Final = 0x1008
 
 
 async def async_setup_entry(
@@ -56,12 +54,12 @@ class RS485Switch(SwitchEntity):
         """初始化開關."""
         self.hass = hass
         self._is_on: bool = False
-        self._name: str = config.get(CONF_NAME, "")
         self._slave: int = config.get(CONF_SLAVE, 0)
         self._state: int = DEFAULT_STATE
         self._has_relay: bool = config.get(HAS_RELAY, True)
         self._entry_id: str = config.get("entry_id", "")
         self._index: int = switch_index
+        self._name: str = f"Button_{self._index}"
         self._unique_id: str = f"{self._entry_id}_{self._index}"
         self._publisher: RS485TcpPublisher = self.hass.data[DOMAIN][
             "rs485_tcp_publisher"
@@ -87,7 +85,7 @@ class RS485Switch(SwitchEntity):
     @property
     def name(self) -> str:
         """返回實體的名稱."""
-        return f"{self._name} - {self._index}"
+        return self._name
 
     @property
     def is_on(self) -> bool:
@@ -101,8 +99,43 @@ class RS485Switch(SwitchEntity):
         result = (high_byte << 8) + (low_byte & 0xFF)
         return result
 
+    def _construct_modbus_message(
+        self,
+        slave: int,
+        function_code: int,
+        register: int,
+        value: int | None = None,
+        length: int | None = None,
+    ) -> bytes:
+        """Modbus TCP Message."""
+        header = b"\x00\x00\x00\x00\x00\x06" + bytes([slave])
+        func_code = bytes([function_code])
+        register_high = register >> 8
+        register_low = register & 0xFF
+
+        if function_code in (3, 4) and length is not None:  # 讀取寄存器，需要長度參數
+            length_high = length >> 8
+            length_low = length & 0xFF
+            message = (
+                header
+                + func_code
+                + bytes([register_high, register_low, length_high, length_low])
+            )
+        elif function_code == 6 and value is not None:  # 寫單個寄存器，需要值參數
+            value_high = value >> 8
+            value_low = value & 0xFF
+            message = (
+                header
+                + func_code
+                + bytes([register_high, register_low, value_high, value_low])
+            )
+        return message
+
     async def _watchdogs(self):
         """監控 Publisher 是否運行."""
+        read_message = self._construct_modbus_message(
+            self._slave, 3, REGISTER_ADDRESS, length=1
+        )
         watchdog_task: asyncio.Task = self.hass.data[DOMAIN][self._entry_id][
             "watchdog_task"
         ]
@@ -114,7 +147,7 @@ class RS485Switch(SwitchEntity):
                 if self._publisher.is_running:
                     await asyncio.sleep(0.1 + self._slave / 10)
                     await asyncio.wait_for(
-                        self._publisher.read_register(self._slave, REGISTER_ADDRESS, 1),
+                        self._publisher.send_message(read_message),
                         timeout=2 * self._slave,
                     )
                     watchdog_task.cancel()
@@ -126,17 +159,26 @@ class RS485Switch(SwitchEntity):
     async def _handle_switch(self, is_on: bool) -> None:
         """處理開關的切換."""
         self.hass.data[DOMAIN][self._entry_id][CONF_SWITCHES] = self._index
-        await self._publisher.read_register(self._slave, REGISTER_ADDRESS, 1)
+        read_message = self._construct_modbus_message(
+            self._slave, 3, REGISTER_ADDRESS, length=1
+        )
+        await self._publisher.send_message(read_message)
         await asyncio.sleep(0.1)
         state = self.hass.data[DOMAIN][self._entry_id][CONF_STATE]
         value = state ^ self._index
-        await self._publisher.write_register(self._slave, REGISTER_ADDRESS, value)
+        write_message = self._construct_modbus_message(
+            self._slave, 6, REGISTER_ADDRESS, value=value
+        )
+        await self._publisher.send_message(write_message)
         self.hass.data[DOMAIN][self._entry_id][CONF_STATE] = value
         self._is_on = is_on
         self.async_write_ha_state()
 
     async def _subscribe_callback(self, sub_id: str, data: tuple[int]) -> None:
         """訂閱回調."""
+
+        if len(data) > 2 and data[1] == 140:
+            return
 
         if len(data) < 8:
             _LOGGER.error("Data too short, received: %s", data)
@@ -208,6 +250,8 @@ class RS485Switch(SwitchEntity):
                 self.hass.data[DOMAIN][self._entry_id][
                     CONF_STATE
                 ] = self._binary_list_to_int(last[-2:])
+        else:
+            return
 
         await self.async_update()
 

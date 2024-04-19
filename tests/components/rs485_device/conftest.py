@@ -1,4 +1,4 @@
-"""Common fixtures for the RS-485 Switch tests."""
+"""Common fixtures for the RS-485 Device tests."""
 
 from collections.abc import Generator
 from unittest.mock import AsyncMock, patch
@@ -10,6 +10,6 @@ import pytest
 def mock_setup_entry() -> Generator[AsyncMock, None, None]:
     """Override async_setup_entry."""
     with patch(
-        "homeassistant.components.rs485_switch.async_setup_entry", return_value=True
+        "homeassistant.components.rs485_device.async_setup_entry", return_value=True
     ) as mock_setup_entry:
         yield mock_setup_entry

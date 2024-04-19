@@ -440,7 +440,7 @@ FLOWS = {
         "roomba",
         "roon",
         "rpi_power",
-        "rs485_switch",
+        "rs485_device",
         "rtsp_to_webrtc",
         "ruckus_unleashed",
         "ruuvi_gateway",

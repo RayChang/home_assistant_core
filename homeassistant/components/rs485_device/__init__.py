@@ -1,4 +1,4 @@
-"""The RS-485 Switch integration."""
+"""The RS-485 Device integration."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from .const import DOMAIN, MODEL
+from .const import CURTAIN_MODEL, DOMAIN, SENSOR_MODEL, SWITCH_MODEL
 from .rs485_tcp_publisher import RS485TcpPublisher
 
 PLATFORMS: dict[str, list[Platform]] = {
@@ -30,14 +30,32 @@ PLATFORMS: dict[str, list[Platform]] = {
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """獲取裝置註冊表。."""
+
+    # 從 entry.data 中獲取所配置的裝置類型
+    device_type = entry.data[CONF_DEVICE]
+
     device_registry = dr.async_get(hass)
+
+    _model = None
+    _domain_data = {}
+    if device_type == CONF_SWITCHES:
+        _model = SWITCH_MODEL
+        _domain_data = {
+            CONF_STATE: None,
+            CONF_SWITCHES: None,
+            "watchdog_task": None,
+        }
+    elif device_type == CONF_COVERS:
+        _model = CURTAIN_MODEL
+    elif device_type == CONF_SENSORS:
+        _model = SENSOR_MODEL[0]
 
     # 在裝置註冊表中創建一個新的裝置
     device = device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, entry.data[CONF_SLAVE])},
         name=entry.data[CONF_NAME],
-        model=MODEL,
+        model=_model,
     )
 
     hass.data.setdefault(
@@ -48,13 +66,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
         },
     )
-    hass.data[DOMAIN][entry.entry_id] = {}
-    hass.data[DOMAIN][entry.entry_id][CONF_DEVICE] = device
-    hass.data[DOMAIN][entry.entry_id][CONF_STATE] = None
-    hass.data[DOMAIN][entry.entry_id][CONF_SWITCHES] = None
-    hass.data[DOMAIN][entry.entry_id]["watchdog_task"] = None
-
-    device_type = entry.data[CONF_DEVICE]
+    hass.data[DOMAIN][entry.entry_id] = {CONF_DEVICE: device, **_domain_data}
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS[device_type])
 

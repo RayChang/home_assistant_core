@@ -1,4 +1,4 @@
-"""Config flow for RS-485 Switch integration."""
+"""Config flow for RS-485 Device integration."""
 
 from __future__ import annotations
 
@@ -10,21 +10,18 @@ import voluptuous as vol
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import (
     CONF_COUNT,
-    CONF_COVERS,
     CONF_DEVICE,
     CONF_ENTITY_ID,
     CONF_HOST,
     CONF_NAME,
     CONF_PORT,
-    CONF_SENSORS,
     CONF_SLAVE,
     CONF_SWITCHES,
-    CONF_TYPE,
 )
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import async_generate_entity_id
 
-from .const import DEVICE_TYPE, DOMAIN, HAS_RELAY, KEY_COUNT
+from .const import DEFAULT_NAME, DEVICE_TYPE, DOMAIN, HAS_RELAY, KEY_COUNT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,24 +38,10 @@ STEP_SWITCH_CONFIG_SCHEMA = {
     vol.Required(CONF_COUNT, default=1): vol.In(KEY_COUNT),
     vol.Required(HAS_RELAY, default=True): cv.boolean,
 }
-STEP_COVERS_CONFIG_SCHEMA = {
-    vol.Required(CONF_TYPE, default=True): cv.boolean,
-    vol.Required(CONF_COUNT, default=1): vol.In(KEY_COUNT),
-}
-STEP_SENSORS_CONFIG_SCHEMA = {
-    vol.Required(CONF_NAME, default="Wall Switch"): cv.string,
-    vol.Required(CONF_SLAVE, default=1): cv.positive_int,
-}
-
-DEVICE_SCHEMA = {
-    CONF_SWITCHES: STEP_SWITCH_CONFIG_SCHEMA,
-    CONF_COVERS: STEP_COVERS_CONFIG_SCHEMA,
-    CONF_SENSORS: STEP_SENSORS_CONFIG_SCHEMA,
-}
 
 
-class RS485SwitchConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for RS-485 Switch."""
+class RS485DeviceConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for RS-485 Device."""
 
     VERSION = 1
 
@@ -87,11 +70,11 @@ class RS485SwitchConfigFlow(ConfigFlow, domain=DOMAIN):
             try:
                 self.rs485_config[CONF_ENTITY_ID] = async_generate_entity_id(
                     DOMAIN + ".{}",
-                    f"{self.rs485_config[CONF_NAME]}.{self.rs485_config[CONF_DEVICE]}.{self.rs485_config[CONF_SLAVE]}",
+                    f"{self.rs485_config[CONF_DEVICE]}.{self.rs485_config[CONF_NAME]}.{self.rs485_config[CONF_SLAVE]}",
                     hass=self.hass,
                 )
                 return self.async_create_entry(
-                    title=f"{self.rs485_config[CONF_NAME]} Configuration",
+                    title=self.rs485_config[CONF_NAME],
                     data=self.rs485_config,
                 )
             except ValueError as e:
@@ -105,13 +88,18 @@ class RS485SwitchConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "unknown"
 
         device_type = self.rs485_config[CONF_DEVICE]
+
+        default_name = DEFAULT_NAME[device_type]
+
+        schema = {
+            vol.Required(CONF_NAME, default=default_name): cv.string,
+            vol.Required(CONF_SLAVE, default=1): cv.positive_int,
+        }
+
+        if device_type == CONF_SWITCHES:
+            schema.update(STEP_SWITCH_CONFIG_SCHEMA)
+
         return self.async_show_form(
             step_id="device_config",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_NAME, default="Wall Switch"): cv.string,
-                    vol.Required(CONF_SLAVE, default=1): cv.positive_int,
-                    **DEVICE_SCHEMA[device_type],
-                }
-            ),
+            data_schema=vol.Schema(schema),
         )
